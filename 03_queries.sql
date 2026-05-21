@@ -175,58 +175,39 @@ CREATE USER IF NOT EXISTS 'consulta_amazon_ecommerce'@'localhost' IDENTIFIED BY 
 GRANT SELECT ON amazon_ecommerce.* TO 'consulta_amazon_ecommerce'@'localhost';
 
 
--- 15. CONSULTA ANALÍTICA Top 5 productos más vendidos 
-WITH ventas_producto AS (
-    SELECT
-        pr.id_producto,
-        pr.nombre AS producto,
-        COUNT(pp.id_pedido) AS num_pedidos,
-        SUM(pp.cantidad) AS unidades_vendidas,
-        SUM(pp.cantidad * pp.precio_unitario) AS ingresos_totales
-    FROM Productos pr
-    INNER JOIN Pedido_Producto pp ON pr.id_producto = pp.id_producto
-    GROUP BY pr.id_producto, pr.nombre
-    HAVING SUM(pp.cantidad) > 0
-)
+-- CONSULTA ANALÍTICA Top 5 productos más vendidos
 SELECT
-    id_producto,
-    producto,
-    num_pedidos,
-    unidades_vendidas,
-    ingresos_totales
-FROM ventas_producto
-ORDER BY unidades_vendidas DESC, ingresos_totales DESC
+    pr.id_producto,
+    pr.nombre AS producto,
+    COUNT(pp.id_pedido) AS num_pedidos,
+    SUM(pp.cantidad) AS unidades_vendidas,
+    SUM(pp.cantidad * pp.precio_unitario) AS ingresos_totales
+FROM Productos pr
+INNER JOIN Pedido_Producto pp ON pr.id_producto = pp.id_producto
+GROUP BY pr.id_producto, pr.nombre
+ORDER BY unidades_vendidas DESC
 LIMIT 5;
 
--- CONSULTA ANALÍTICA Clientes con más devoluciones vs total de pedidos 
+-- CONSULTA ANALÍTICA Clientes con más devoluciones vs total de pedidos
 SELECT
     c.id_cliente,
     CONCAT(c.nombre, ' ', c.apellido) AS cliente,
-    COUNT(p.id_pedido) AS total_pedidos,
-    (SELECT COUNT(*) FROM Devoluciones d WHERE d.id_cliente = c.id_cliente) AS total_devoluciones,
-    CASE
-        WHEN (SELECT COUNT(*) FROM Devoluciones d WHERE d.id_cliente = c.id_cliente) >= 3 THEN 'Alto'
-        WHEN (SELECT COUNT(*) FROM Devoluciones d WHERE d.id_cliente = c.id_cliente) >= 1 THEN 'Medio'
-        ELSE 'Bajo'
-    END AS nivel_devoluciones
+    COUNT(DISTINCT p.id_pedido) AS total_pedidos,
+    COUNT(DISTINCT d.id_devolucion) AS total_devoluciones
 FROM Clientes c
 INNER JOIN Pedidos p ON c.id_cliente = p.id_cliente
+LEFT JOIN Devoluciones d ON c.id_cliente = d.id_cliente
 GROUP BY c.id_cliente, c.nombre, c.apellido
 HAVING total_devoluciones > 0
 ORDER BY total_devoluciones DESC;
 
--- CONSULTA ANALÍTICA Ranking de sucursales por ventas mensuales 
+-- CONSULTA ANALÍTICA Ventas totales por sucursal y mes
 SELECT
     s.nombre AS sucursal,
     MONTH(p.fecha_pedido) AS mes,
-    SUM(p.total) AS ventas_mes,
-    RANK() OVER (PARTITION BY MONTH(p.fecha_pedido) ORDER BY SUM(p.total) DESC) AS ranking,
-    CASE
-        WHEN SUM(p.total) >= 10000 THEN 'Alto'
-        WHEN SUM(p.total) >= 5000 THEN 'Medio'
-        ELSE 'Bajo'
-    END AS nivel_ventas
+    COUNT(p.id_pedido) AS total_pedidos,
+    SUM(p.total) AS ventas_mes
 FROM Sucursales s
 INNER JOIN Pedidos p ON s.id_sucursal = p.id_sucursal
 GROUP BY s.id_sucursal, s.nombre, MONTH(p.fecha_pedido)
-ORDER BY mes, ranking;
+ORDER BY mes, ventas_mes DESC;
